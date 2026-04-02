@@ -63,6 +63,19 @@ Finally, run the evaluation script:
 python run_eval.py --episodes [INT] --scene [INT] --headless
 ```
 
+If you want the OpenCV preview window instead of `--headless`, first repair the
+project virtualenv once with the GUI-enabled OpenCV wheel:
+```bash
+.venv/bin/python -m pip install --no-deps --force-reinstall \
+  /tmp/opencv_python-4.11.0.86-cp37-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl
+```
+
+After that, always launch the eval with `uv --no-sync`, otherwise `uv run`
+will resync the environment and switch OpenCV back to the headless build:
+```bash
+uv run --no-sync run_eval.py --episodes [INT] --scene [INT]
+```
+
 ## Minimal Example
 
 ```python

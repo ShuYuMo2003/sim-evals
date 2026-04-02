@@ -4,7 +4,9 @@ import numpy as np
 import torch
 from PIL import Image
 from openpi_client import websocket_client_policy, image_tools
+from pathlib import Path
 from typing import List
+import pickle
 
 from .abstract_client import InferenceClient
 from .ikfk_utils import DroidFrankaIKFK, _load_pk
@@ -99,17 +101,31 @@ class Client(InferenceClient):
             }
             t0 = time.time()
             print("[CLIENT] waiting for remote inference.")
-            pred_delta_action_chunk = self.client.infer(request_data)["actions"]
+            
+            print("! DEBUG ! short cut here.")
+            if Path("cache.pkl").exists():
+                response_data = pickle.loads(Path("cache.pkl").read_bytes())
+            else:
+                response_data = self.client.infer(request_data)
+                Path("cache.pkl").write_bytes(pickle.dumps(response_data))
+
+            pred_delta_action_chunk = response_data
             print(f"[CLIENT] new action chunk received, time used {time.time() - t0:.2f}")
 
             cartesian_position = curr_obs['cartesian_position']
+
+            if getattr(self, "__debug_cartesian_position") is not None:
+                cartesian_position = self.__debug_cartesian_position
+            else:
+                self.__debug_cartesian_position = cartesian_position
+
             pred_transform_action_chunk = compute_abs_eef_position(
                 cartesian_position, 
                 list(map(lambda x : x[:6], pred_delta_action_chunk))
             )
             self.pred_action_chunk = [
-                torch.cat(pred_transform_action_chunk[i], pred_delta_action_chunk[-1:])
-                for i in range(len(self.pred_action_chunk))
+                np.concatenate((pred_transform_action_chunk[i], pred_delta_action_chunk[i][-1:]))
+                for i in range(len(pred_transform_action_chunk))
             ]
 
         policy_action = np.asarray(self.pred_action_chunk[self.actions_from_chunk_completed])
@@ -137,11 +153,16 @@ class Client(InferenceClient):
         else:
             arm_action = ik_result.joint_position
 
-        if policy_action[-1].item() > 0.5:
+        if policy_action[-1].item() > 0.1:
             gripper_action = np.ones((1,), dtype=np.float32)
         else:
             gripper_action = np.zeros((1,), dtype=np.float32)
         action = np.concatenate([arm_action, gripper_action]).astype(np.float32)
+
+        print("current action idx =", self.actions_from_chunk_completed)
+        print("Arm Will Exec: ", arm_action)
+        print("Gip Will Exec: ", gripper_action)
+        print("IK Error: ", ik_result.err_pos, ik_result.err_rot)
 
         both = np.concatenate([curr_obs["left_image"], curr_obs["wrist_image"], curr_obs["right_image"]], axis=1)
         return {"action": action, "viz": both}

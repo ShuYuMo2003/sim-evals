@@ -2,6 +2,7 @@
 data/
 runs/
 assets/
+cache.pkl
 
 
 

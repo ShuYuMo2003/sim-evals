@@ -9,6 +9,7 @@ dependencies = [
   "mediapy>=1.2.4",
   "openpi-client",
   "isaaclab[all,isaacsim]==2.2.0",
+  "pytorch-kinematics>=0.7.5",
   "tyro>=0.9.17",
   "websockets>=16.0",
 ]
@@ -25,7 +26,7 @@ torch = [
 torchvision = {index = "pytorch-cu118", marker = "sys_platform == 'linux' or sys_platform == 'win32'"}
 isaacsim = { index = "isaac" }
 real2simeval = { workspace = true }
-openpi-client = { git = "https://github.com/Physical-Intelligence/openpi.git", subdirectory = "packages/openpi-client" }
+openpi-client = { url = "https://github.com/Physical-Intelligence/openpi/archive/fdc03f527881cdfc8ae1a168ed6a20c60edbbbcc.tar.gz", subdirectory = "packages/openpi-client" }
 
 [[tool.uv.index]]
 name = "isaac"

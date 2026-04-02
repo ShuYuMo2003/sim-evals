@@ -18,8 +18,10 @@ Finally, run the evaluation script:
 python run_eval.py --episodes 10 --headless
 """
 
-import tyro
 import argparse
+import os
+
+import tyro
 import gymnasium as gym
 import torch
 import cv2
@@ -29,14 +31,40 @@ from pathlib import Path
 from tqdm import tqdm
 
 from sim_evals.inference.droid_jointpos import Client as DroidJointPosClient
+from sim_evals.inference.droid_camera_action import Client as DroidCameraActionClient
+
+
+def _sanitize_isaac_runtime_env() -> None:
+    """Prefer the system NVIDIA driver libs over local CUDA toolkit paths.
+
+    Omniverse/Isaac ships its own runtime stack and should discover the driver
+    entry points from the installed NVIDIA driver. On developer machines it's
+    common to have `/usr/local/cuda-*` in `LD_LIBRARY_PATH`; that can confuse
+    Isaac startup and produce Warp CUDA driver-entry warnings.
+    """
+
+    ld_library_path = os.environ.get("LD_LIBRARY_PATH", "")
+    if ld_library_path:
+        filtered_parts = []
+        for part in ld_library_path.split(":"):
+            if not part:
+                continue
+            if part.startswith("/usr/local/cuda-") or part == "/usr/local/cuda/lib64":
+                continue
+            filtered_parts.append(part)
+        os.environ["LD_LIBRARY_PATH"] = ":".join(filtered_parts)
+
+    for key in ("CUDA_HOME", "CUDA_PATH"):
+        os.environ.pop(key, None)
 
 
 def main(
         episodes:int = 10,
-        headless: bool = True,
+        headless: bool = False,
         scene: int = 1,
         ):
     # launch omniverse app with arguments (inside function to prevent overriding tyro)
+    _sanitize_isaac_runtime_env()
     from isaaclab.app import AppLauncher
     parser = argparse.ArgumentParser(description="Tutorial on creating an empty stage.")
     AppLauncher.add_app_launcher_args(parser)
@@ -74,7 +102,7 @@ def main(
 
     obs, _ = env.reset()
     obs, _ = env.reset() # need second render cycle to get correctly loaded materials
-    client = DroidJointPosClient()
+    client = DroidCameraActionClient()
 
 
     video_dir = Path("runs") / datetime.now().strftime("%Y-%m-%d") / datetime.now().strftime("%H-%M-%S")

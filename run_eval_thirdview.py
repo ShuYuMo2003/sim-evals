@@ -41,6 +41,7 @@ def main(
     remote_host: str = "localhost",
     remote_port: int = 8000,
     open_loop_horizon: int = 8,
+    max_steps: int | None = None,
 ):
     _sanitize_isaac_runtime_env()
     from isaaclab.app import AppLauncher
@@ -72,11 +73,12 @@ def main(
     else:
         raise ValueError(f"Scene {scene} not supported")
 
+    if max_steps is not None:
+        control_rate_hz = 1.0 / (env_cfg.sim.dt * env_cfg.decimation)
+        env_cfg.episode_length_s = float(max_steps) / float(control_rate_hz)
+
     env_cfg.set_scene(scene)
     env = gym.make("DROID", cfg=env_cfg)
-
-    obs, _ = env.reset()
-    obs, _ = env.reset()
     client = DroidJointPosThirdViewClient(
         remote_host=remote_host,
         remote_port=remote_port,
@@ -85,10 +87,13 @@ def main(
 
     video_dir = Path("runs") / datetime.now().strftime("%Y-%m-%d") / datetime.now().strftime("%H-%M-%S")
     video_dir.mkdir(parents=True, exist_ok=True)
-    video = []
-    max_steps = env.env.max_episode_length
+    if max_steps is None:
+        max_steps = env.env.max_episode_length
     with torch.no_grad():
         for ep in range(episodes):
+            obs, _ = env.reset()
+            obs, _ = env.reset()
+            video = []
             for _ in tqdm(range(max_steps), desc=f"Episode {ep + 1}/{episodes}"):
                 ret = client.infer(obs, instruction)
                 if not headless:
@@ -106,7 +111,6 @@ def main(
                 video,
                 fps=15,
             )
-            video = []
 
     env.close()
     simulation_app.close()

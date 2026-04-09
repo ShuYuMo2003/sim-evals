@@ -21,9 +21,9 @@ class Client(InferenceClient):
 
     def visualize(self, request: dict):
         curr_obs = self._extract_observation(request)
-        left_img = image_tools.resize_with_pad(curr_obs["left_image"], 320, 180)
-        right_img = image_tools.resize_with_pad(curr_obs["right_image"], 320, 180)
-        wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 320, 180)
+        left_img = image_tools.resize_with_pad(curr_obs["left_image"], 180, 320)
+        right_img = image_tools.resize_with_pad(curr_obs["right_image"], 180, 320)
+        wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 180, 320)
         combined = np.concatenate([left_img, right_img, wrist_img], axis=1)
         return combined
 
@@ -40,13 +40,13 @@ class Client(InferenceClient):
             self.actions_from_chunk_completed = 0
             request_data = {
                 "observation/exterior_image_0_left": image_tools.resize_with_pad(
-                    curr_obs["left_image"], 320, 180
+                    curr_obs["left_image"], 180, 320
                 ),
                 "observation/exterior_image_1_left": image_tools.resize_with_pad(
-                    curr_obs["right_image"], 320, 180
+                    curr_obs["right_image"], 180, 320
                 ),
                 "observation/wrist_image_left": image_tools.resize_with_pad(
-                    curr_obs["wrist_image"], 320, 180
+                    curr_obs["wrist_image"], 180, 320
                 ),
                 "observation/joint_position": curr_obs["joint_position"],
                 "observation/gripper_position": curr_obs["gripper_position"],
@@ -62,9 +62,9 @@ class Client(InferenceClient):
         else:
             action = np.concatenate([action[:-1], np.zeros((1,))])
 
-        left_img = image_tools.resize_with_pad(curr_obs["left_image"], 320, 180)
-        right_img = image_tools.resize_with_pad(curr_obs["right_image"], 320, 180)
-        wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 320, 180)
+        left_img = image_tools.resize_with_pad(curr_obs["left_image"], 180, 320)
+        right_img = image_tools.resize_with_pad(curr_obs["right_image"], 180, 320)
+        wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 180, 320)
         viz = np.concatenate([left_img, right_img, wrist_img], axis=1)
 
         return {"action": action, "viz": viz}

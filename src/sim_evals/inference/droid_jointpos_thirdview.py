@@ -18,6 +18,9 @@ class Client(InferenceClient):
 
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None
+        self.control_step = 0
+        self.history_step_indices = []
+        self.history_stitched_frames = []
 
     def visualize(self, request: dict):
         curr_obs = self._extract_observation(request)
@@ -28,43 +31,53 @@ class Client(InferenceClient):
         return combined
 
     def reset(self):
+        self.client.infer({"reset": True})
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None
+        self.control_step = 0
+        self.history_step_indices = []
+        self.history_stitched_frames = []
 
     def infer(self, obs: dict, instruction: str) -> dict:
         curr_obs = self._extract_observation(obs)
+        left_img = image_tools.resize_with_pad(curr_obs["left_image"], 180, 320)
+        right_img = image_tools.resize_with_pad(curr_obs["right_image"], 180, 320)
+        wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 180, 320)
+        stitched_frame = np.concatenate([left_img, right_img, wrist_img], axis=0)
         if (
             self.actions_from_chunk_completed == 0
             or self.actions_from_chunk_completed >= self.open_loop_horizon
         ):
+            executed_count = self.actions_from_chunk_completed
             self.actions_from_chunk_completed = 0
             request_data = {
-                "observation/exterior_image_0_left": image_tools.resize_with_pad(
-                    curr_obs["left_image"], 180, 320
-                ),
-                "observation/exterior_image_1_left": image_tools.resize_with_pad(
-                    curr_obs["right_image"], 180, 320
-                ),
-                "observation/wrist_image_left": image_tools.resize_with_pad(
-                    curr_obs["wrist_image"], 180, 320
-                ),
+                "observation/exterior_image_0_left": left_img,
+                "observation/exterior_image_1_left": right_img,
+                "observation/wrist_image_left": wrist_img,
                 "observation/joint_position": curr_obs["joint_position"],
                 "observation/gripper_position": curr_obs["gripper_position"],
                 "prompt": instruction,
+                "control_step": self.control_step,
+                "history/executed_action_count": executed_count,
+                "history/step_indices": np.asarray(self.history_step_indices, dtype=np.int64),
+                "history/stitched_frames": list(self.history_stitched_frames),
             }
             self.pred_action_chunk = self.client.infer(request_data)["actions"]
 
         action = self.pred_action_chunk[self.actions_from_chunk_completed]
         self.actions_from_chunk_completed += 1
+        self.history_step_indices.append(self.control_step)
+        self.history_stitched_frames.append(stitched_frame)
+        if len(self.history_step_indices) > 256:
+            self.history_step_indices = self.history_step_indices[-256:]
+            self.history_stitched_frames = self.history_stitched_frames[-256:]
+        self.control_step += 1
 
         if action[-1].item() > 0.5:
             action = np.concatenate([action[:-1], np.ones((1,))])
         else:
             action = np.concatenate([action[:-1], np.zeros((1,))])
 
-        left_img = image_tools.resize_with_pad(curr_obs["left_image"], 180, 320)
-        right_img = image_tools.resize_with_pad(curr_obs["right_image"], 180, 320)
-        wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 180, 320)
         viz = np.concatenate([left_img, right_img, wrist_img], axis=1)
 
         return {"action": action, "viz": viz}

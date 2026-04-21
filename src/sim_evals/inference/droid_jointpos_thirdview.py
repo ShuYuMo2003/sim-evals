@@ -19,8 +19,8 @@ class Client(InferenceClient):
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None
         self.control_step = 0
-        self.history_step_indices = []
-        self.history_stitched_frames = []
+        self.history_steps = []
+        self.history_frames = []
 
     def visualize(self, request: dict):
         curr_obs = self._extract_observation(request)
@@ -31,12 +31,11 @@ class Client(InferenceClient):
         return combined
 
     def reset(self):
-        self.client.infer({"reset": True})
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None
         self.control_step = 0
-        self.history_step_indices = []
-        self.history_stitched_frames = []
+        self.history_steps = []
+        self.history_frames = []
 
     def infer(self, obs: dict, instruction: str) -> dict:
         curr_obs = self._extract_observation(obs)
@@ -59,18 +58,18 @@ class Client(InferenceClient):
                 "prompt": instruction,
                 "control_step": self.control_step,
                 "history/executed_action_count": executed_count,
-                "history/step_indices": np.asarray(self.history_step_indices, dtype=np.int64),
-                "history/stitched_frames": list(self.history_stitched_frames),
+                "history/step_indices": np.asarray(self.history_steps, dtype=np.int64),
+                "history/stitched_frames": list(self.history_frames),
             }
             self.pred_action_chunk = self.client.infer(request_data)["actions"]
 
         action = self.pred_action_chunk[self.actions_from_chunk_completed]
         self.actions_from_chunk_completed += 1
-        self.history_step_indices.append(self.control_step)
-        self.history_stitched_frames.append(stitched_frame)
-        if len(self.history_step_indices) > 256:
-            self.history_step_indices = self.history_step_indices[-256:]
-            self.history_stitched_frames = self.history_stitched_frames[-256:]
+        self.history_steps.append(self.control_step)
+        self.history_frames.append(stitched_frame)
+        if len(self.history_steps) > 256:
+            self.history_steps = self.history_steps[-256:]
+            self.history_frames = self.history_frames[-256:]
         self.control_step += 1
 
         if action[-1].item() > 0.5:

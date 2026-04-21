@@ -96,9 +96,6 @@ def main(
             video = []
             for _ in tqdm(range(max_steps), desc=f"Episode {ep + 1}/{episodes}"):
                 ret = client.infer(obs, instruction)
-                if not headless:
-                    cv2.imshow("DROID Third-View Client", cv2.cvtColor(ret["viz"], cv2.COLOR_RGB2BGR))
-                    cv2.waitKey(1)
                 video.append(ret["viz"])
                 action = torch.tensor(ret["action"])[None]
                 obs, _, term, trunc, _ = env.step(action)

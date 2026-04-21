@@ -1,7 +1,8 @@
 import uuid
 
 import numpy as np
-from openpi_client import image_tools, websocket_client_policy
+from openpi_client import image_tools
+from eval_utils.policy_client import WebsocketClientPolicy
 
 from .abstract_client import InferenceClient
 
@@ -13,7 +14,7 @@ class Client(InferenceClient):
         remote_port: int = 6000,
         open_loop_horizon: int = 8,
     ) -> None:
-        self.client = websocket_client_policy.WebsocketClientPolicy(remote_host, remote_port)
+        self.client = WebsocketClientPolicy(remote_host, remote_port)
         self.open_loop_horizon = open_loop_horizon
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None

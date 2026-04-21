@@ -2,9 +2,9 @@ import uuid
 
 import numpy as np
 from openpi_client import image_tools
-from eval_utils.policy_client import WebsocketClientPolicy
 
 from .abstract_client import InferenceClient
+from .dreamzero_websocket_client import WebsocketClientPolicy
 
 
 class Client(InferenceClient):

@@ -26,8 +26,8 @@ class Client(InferenceClient):
         curr_obs = self._extract_observation(request)
         left_img = image_tools.resize_with_pad(curr_obs["left_image"], 180, 320)
         right_img = image_tools.resize_with_pad(curr_obs["right_image"], 180, 320)
-        wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 180, 320)
-        combined = np.concatenate([right_img, left_img, wrist_img], axis=1)
+        wrist_img = self._prepare_wrist_image(curr_obs["wrist_image"])
+        combined = np.concatenate([left_img, right_img, wrist_img], axis=1)
         return combined
 
     def reset(self):
@@ -41,8 +41,8 @@ class Client(InferenceClient):
         curr_obs = self._extract_observation(obs)
         left_img = image_tools.resize_with_pad(curr_obs["left_image"], 180, 320)
         right_img = image_tools.resize_with_pad(curr_obs["right_image"], 180, 320)
-        wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 180, 320)
-        stitched_frame = np.concatenate([right_img, left_img, wrist_img], axis=0)
+        wrist_img = self._prepare_wrist_image(curr_obs["wrist_image"])
+        stitched_frame = np.concatenate([left_img, right_img, wrist_img], axis=0)
         if (
             self.actions_from_chunk_completed == 0
             or self.actions_from_chunk_completed >= self.open_loop_horizon
@@ -50,8 +50,8 @@ class Client(InferenceClient):
             executed_count = self.actions_from_chunk_completed
             self.actions_from_chunk_completed = 0
             request_data = {
-                "observation/exterior_image_0_left": right_img,
-                "observation/exterior_image_1_left": left_img,
+                "observation/exterior_image_0_left": left_img,
+                "observation/exterior_image_1_left": right_img,
                 "observation/wrist_image_left": wrist_img,
                 "observation/joint_position": curr_obs["joint_position"],
                 "observation/gripper_position": curr_obs["gripper_position"],
@@ -77,9 +77,13 @@ class Client(InferenceClient):
         else:
             action = np.concatenate([action[:-1], np.zeros((1,))])
 
-        viz = np.concatenate([right_img, left_img, wrist_img], axis=1)
+        viz = np.concatenate([left_img, right_img, wrist_img], axis=1)
 
         return {"action": action, "viz": viz}
+
+    def _prepare_wrist_image(self, wrist_image: np.ndarray) -> np.ndarray:
+        wrist_img = image_tools.resize_with_pad(wrist_image, 180, 320)
+        return np.ascontiguousarray(wrist_img[:, ::-1])
 
     def _extract_observation(self, obs_dict, *, save_to_disk=False):
         left_image = obs_dict["policy"]["external_cam"][0].clone().detach().cpu().numpy()
@@ -91,7 +95,8 @@ class Client(InferenceClient):
         gripper_position = robot_state["gripper_pos"].clone().detach().cpu().numpy()
 
         if save_to_disk:
-            combined_image = np.concatenate([right_image, left_image, wrist_image], axis=1)
+            flipped_wrist_image = np.ascontiguousarray(wrist_image[:, ::-1])
+            combined_image = np.concatenate([left_image, right_image, flipped_wrist_image], axis=1)
             Image.fromarray(combined_image).save("robot_camera_views.png")
 
         return {

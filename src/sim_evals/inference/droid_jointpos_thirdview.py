@@ -31,6 +31,7 @@ class Client(InferenceClient):
         return combined
 
     def reset(self):
+        self.client.infer({"reset": True})
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None
         self.control_step = 0

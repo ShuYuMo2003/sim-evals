@@ -19,8 +19,6 @@ class Client(InferenceClient):
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None
         self.control_step = 0
-        self.history_steps = []
-        self.history_frames = []
 
     def visualize(self, request: dict):
         curr_obs = self._extract_observation(request)
@@ -35,15 +33,12 @@ class Client(InferenceClient):
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None
         self.control_step = 0
-        self.history_steps = []
-        self.history_frames = []
 
     def infer(self, obs: dict, instruction: str) -> dict:
         curr_obs = self._extract_observation(obs)
         right_img = image_tools.resize_with_pad(curr_obs["right_image"], 180, 320)
         left_img = image_tools.resize_with_pad(curr_obs["left_image"], 180, 320)
         wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 180, 320)
-        stitched_frame = np.concatenate([right_img, left_img, wrist_img], axis=0)
         if (
             self.actions_from_chunk_completed == 0
             or self.actions_from_chunk_completed >= self.open_loop_horizon
@@ -59,18 +54,11 @@ class Client(InferenceClient):
                 "prompt": instruction,
                 "control_step": self.control_step,
                 "history/executed_action_count": executed_count,
-                "history/step_indices": np.asarray(self.history_steps, dtype=np.int64),
-                "history/stitched_frames": list(self.history_frames),
             }
             self.pred_action_chunk = self.client.infer(request_data)["actions"]
 
         action = self.pred_action_chunk[self.actions_from_chunk_completed]
         self.actions_from_chunk_completed += 1
-        self.history_steps.append(self.control_step)
-        self.history_frames.append(stitched_frame)
-        if len(self.history_steps) > 256:
-            self.history_steps = self.history_steps[-256:]
-            self.history_frames = self.history_frames[-256:]
         self.control_step += 1
 
         if action[-1].item() > 0.5:

@@ -19,6 +19,7 @@ class Client(InferenceClient):
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None
         self.control_step = 0
+        self.executed_actions_since_request = []
 
     def visualize(self, request: dict):
         curr_obs = self._extract_observation(request)
@@ -33,9 +34,16 @@ class Client(InferenceClient):
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None
         self.control_step = 0
+        self.executed_actions_since_request = []
 
     def infer(self, obs: dict, instruction: str) -> dict:
         curr_obs = self._extract_observation(obs)
+        if self.control_step > 0:
+            executed_action = np.concatenate([
+                np.asarray(curr_obs["joint_position"], dtype=np.float32).reshape(7),
+                np.asarray(curr_obs["gripper_position"], dtype=np.float32).reshape(1),
+            ])
+            self.executed_actions_since_request.append(executed_action)
         right_img = image_tools.resize_with_pad(curr_obs["right_image"], 180, 320)
         left_img = image_tools.resize_with_pad(curr_obs["left_image"], 180, 320)
         wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 180, 320)
@@ -55,7 +63,10 @@ class Client(InferenceClient):
                 "control_step": self.control_step,
                 "history/executed_action_count": executed_count,
             }
+            if len(self.executed_actions_since_request) > 0:
+                request_data["history/executed_actions"] = np.stack(self.executed_actions_since_request, axis=0).astype(np.float32)
             self.pred_action_chunk = self.client.infer(request_data)["actions"]
+            self.executed_actions_since_request = []
 
         action = self.pred_action_chunk[self.actions_from_chunk_completed]
         self.actions_from_chunk_completed += 1

@@ -82,6 +82,7 @@ def main(
         remote_host=remote_host,
         remote_port=remote_port,
         open_loop_horizon=open_loop_horizon,
+        openpi_action_mode="joint_position",
     )
 
     video_dir = Path("runs") / datetime.now().strftime("%Y-%m-%d") / datetime.now().strftime("%H-%M-%S")

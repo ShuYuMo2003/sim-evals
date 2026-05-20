@@ -12,7 +12,7 @@ class Client(InferenceClient):
         remote_host: str = "localhost",
         remote_port: int = 8000,
         open_loop_horizon: int = 8,
-        openpi_action_mode: str = "joint_velocity",
+        openpi_action_mode: str = "joint_position",
         openpi_control_dt: float = 1.0 / 15.0,
     ) -> None:
         self.open_loop_horizon = open_loop_horizon

@@ -10,8 +10,12 @@ class Client(InferenceClient):
                 remote_host:str = "localhost", 
                 remote_port:int = 8000,
                 open_loop_horizon:int = 8,
+                openpi_action_mode: str = "joint_velocity",
+                openpi_control_dt: float = 1.0 / 15.0,
                  ) -> None:
         self.open_loop_horizon = open_loop_horizon
+        self.openpi_action_mode = openpi_action_mode
+        self.openpi_control_dt = float(openpi_control_dt)
         self.client = websocket_client_policy.WebsocketClientPolicy(
             remote_host, remote_port
         )
@@ -54,7 +58,10 @@ class Client(InferenceClient):
                 "observation/gripper_position": curr_obs["gripper_position"],
                 "prompt": instruction,
             }
-            self.pred_action_chunk = self.client.infer(request_data)["actions"]
+            self.pred_action_chunk = self._convert_openpi_actions(
+                self.client.infer(request_data)["actions"],
+                curr_obs["joint_position"],
+            )
 
         action = self.pred_action_chunk[self.actions_from_chunk_completed]
         self.actions_from_chunk_completed += 1
@@ -70,6 +77,18 @@ class Client(InferenceClient):
         both = np.concatenate([img1, img2], axis=1)
 
         return {"action": action, "viz": both}
+
+    def _convert_openpi_actions(self, actions: np.ndarray, joint_position: np.ndarray) -> np.ndarray:
+        actions = np.asarray(actions, dtype=np.float32)
+        if self.openpi_action_mode == "joint_position":
+            return actions
+        if self.openpi_action_mode != "joint_velocity":
+            raise ValueError(f"Unsupported openpi_action_mode={self.openpi_action_mode!r}.")
+        converted = actions.copy()
+        joint_velocity = converted[:, :7]
+        start = np.asarray(joint_position, dtype=np.float32).reshape(1, 7)
+        converted[:, :7] = start + np.cumsum(joint_velocity, axis=0) * self.openpi_control_dt
+        return converted
 
     def _extract_observation(self, obs_dict, *, save_to_disk=False):
         # Assign images

@@ -12,14 +12,19 @@ class Client(InferenceClient):
         remote_host: str = "localhost",
         remote_port: int = 8000,
         open_loop_horizon: int = 8,
+        openpi_action_mode: str = "joint_velocity",
+        openpi_control_dt: float = 1.0 / 15.0,
     ) -> None:
         self.open_loop_horizon = open_loop_horizon
+        self.openpi_action_mode = openpi_action_mode
+        self.openpi_control_dt = float(openpi_control_dt)
         self.client = websocket_client_policy.WebsocketClientPolicy(remote_host, remote_port)
 
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None
         self.control_step = 0
         self.executed_actions_since_request = []
+        self.image_history_since_request = []
 
     def visualize(self, request: dict):
         curr_obs = self._extract_observation(request)
@@ -35,6 +40,7 @@ class Client(InferenceClient):
         self.pred_action_chunk = None
         self.control_step = 0
         self.executed_actions_since_request = []
+        self.image_history_since_request = []
 
     def infer(self, obs: dict, instruction: str) -> dict:
         curr_obs = self._extract_observation(obs)
@@ -47,6 +53,7 @@ class Client(InferenceClient):
         right_img = image_tools.resize_with_pad(curr_obs["right_image"], 180, 320)
         left_img = image_tools.resize_with_pad(curr_obs["left_image"], 180, 320)
         wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 180, 320)
+        stitched_frame = np.concatenate([right_img, left_img, wrist_img], axis=1)
         if (
             self.actions_from_chunk_completed == 0
             or self.actions_from_chunk_completed >= self.open_loop_horizon
@@ -65,8 +72,18 @@ class Client(InferenceClient):
             }
             if len(self.executed_actions_since_request) > 0:
                 request_data["history/executed_actions"] = np.stack(self.executed_actions_since_request, axis=0).astype(np.float32)
-            self.pred_action_chunk = self.client.infer(request_data)["actions"]
+            if len(self.image_history_since_request) > 0:
+                history_steps, history_frames = zip(*self.image_history_since_request)
+                request_data["history/step_indices"] = np.asarray(history_steps, dtype=np.int64)
+                request_data["history/stitched_frames"] = np.stack(history_frames, axis=0).astype(np.uint8, copy=False)
+            self.pred_action_chunk = self._convert_openpi_actions(
+                self.client.infer(request_data)["actions"],
+                curr_obs["joint_position"],
+            )
             self.executed_actions_since_request = []
+            self.image_history_since_request = []
+        else:
+            self.image_history_since_request.append((int(self.control_step), stitched_frame.copy()))
 
         action = self.pred_action_chunk[self.actions_from_chunk_completed]
         self.actions_from_chunk_completed += 1
@@ -77,9 +94,19 @@ class Client(InferenceClient):
         else:
             action = np.concatenate([action[:-1], np.zeros((1,))])
 
-        viz = np.concatenate([right_img, left_img, wrist_img], axis=1)
+        return {"action": action, "viz": stitched_frame}
 
-        return {"action": action, "viz": viz}
+    def _convert_openpi_actions(self, actions: np.ndarray, joint_position: np.ndarray) -> np.ndarray:
+        actions = np.asarray(actions, dtype=np.float32)
+        if self.openpi_action_mode == "joint_position":
+            return actions
+        if self.openpi_action_mode != "joint_velocity":
+            raise ValueError(f"Unsupported openpi_action_mode={self.openpi_action_mode!r}.")
+        converted = actions.copy()
+        joint_velocity = converted[:, :7]
+        start = np.asarray(joint_position, dtype=np.float32).reshape(1, 7)
+        converted[:, :7] = start + np.cumsum(joint_velocity, axis=0) * self.openpi_control_dt
+        return converted
 
     def _extract_observation(self, obs_dict, *, save_to_disk=False):
         right_image = obs_dict["policy"]["external_cam"][0].clone().detach().cpu().numpy()

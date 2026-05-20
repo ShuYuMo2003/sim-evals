@@ -62,6 +62,12 @@ def main(
         episodes:int = 10,
         headless: bool = False,
         scene: int = 1,
+        remote_host: str = "localhost",
+        remote_port: int = 8000,
+        open_loop_horizon: int = 8,
+        openpi_action_mode: str = "joint_velocity",
+        openpi_control_dt: float = 1.0 / 15.0,
+        policy_client: str = "jointpos",
         ):
     # launch omniverse app with arguments (inside function to prevent overriding tyro)
     _sanitize_isaac_runtime_env()
@@ -102,7 +108,22 @@ def main(
 
     obs, _ = env.reset()
     obs, _ = env.reset() # need second render cycle to get correctly loaded materials
-    client = DroidCameraActionClient()
+    if policy_client == "jointpos":
+        client = DroidJointPosClient(
+            remote_host=remote_host,
+            remote_port=remote_port,
+            open_loop_horizon=open_loop_horizon,
+            openpi_action_mode=openpi_action_mode,
+            openpi_control_dt=openpi_control_dt,
+        )
+    elif policy_client == "camera_action":
+        client = DroidCameraActionClient(
+            remote_host=remote_host,
+            remote_port=remote_port,
+            open_loop_horizon=open_loop_horizon,
+        )
+    else:
+        raise ValueError(f"Unsupported policy_client={policy_client!r}.")
 
 
     video_dir = Path("runs") / datetime.now().strftime("%Y-%m-%d") / datetime.now().strftime("%H-%M-%S")

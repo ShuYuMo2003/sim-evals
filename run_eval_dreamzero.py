@@ -7,7 +7,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-import cv2
 import gymnasium as gym
 import mediapy
 import torch
@@ -99,9 +98,6 @@ def main(
             for _ in tqdm(range(max_steps), desc=f"Episode {ep + 1}/{episodes}"):
                 ret = client.infer(obs, instruction)
                 video.append(ret["viz"])
-                if not headless:
-                    cv2.imshow("DreamZero Eval", cv2.cvtColor(ret["viz"], cv2.COLOR_RGB2BGR))
-                    cv2.waitKey(1)
                 action = torch.tensor(ret["action"])[None]
                 obs, _, term, trunc, _ = env.step(action)
                 if term or trunc:

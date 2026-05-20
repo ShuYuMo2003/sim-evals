@@ -7,7 +7,6 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-import cv2
 import gymnasium as gym
 import mediapy
 import torch
@@ -69,7 +68,7 @@ def main(
     elif scene == 2:
         instruction = "put the can in the mug"
     elif scene == 3:
-        instruction = "put banana in the bin"
+        instruction = "put banana in the purple basket"
     else:
         raise ValueError(f"Scene {scene} not supported")
 

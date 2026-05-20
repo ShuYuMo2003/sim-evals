@@ -291,7 +291,7 @@ class EnvCfg(ManagerBasedRLEnvCfg):
     def __post_init__(self):
         self.episode_length_s = 30
 
-        self.viewer.eye = (4.5, 0.0, 6.0)
+        self.viewer.eye = (2.5, 0.0, 1.5)
         self.viewer.lookat = (0.0, 0.0, 0.0)
 
         self.decimation = 8

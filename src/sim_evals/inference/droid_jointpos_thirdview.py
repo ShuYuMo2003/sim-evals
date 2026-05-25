@@ -19,6 +19,15 @@ class Client(InferenceClient):
         self.openpi_action_mode = openpi_action_mode
         self.openpi_control_dt = float(openpi_control_dt)
         self.client = websocket_client_policy.WebsocketClientPolicy(remote_host, remote_port)
+        metadata_getter = getattr(self.client, "get_server_metadata", None)
+        self._server_metadata = metadata_getter() if callable(metadata_getter) else {}
+        if bool(self._server_metadata.get("causal_action_rollout")) and self.open_loop_horizon is not None:
+            causal_chunk_len = int(self._server_metadata.get("causal_action_chunk_len") or 0)
+            if causal_chunk_len > 0 and int(self.open_loop_horizon) < causal_chunk_len:
+                raise ValueError(
+                    "SmartWorld causal rollout requires consuming a full causal action chunk before re-querying. "
+                    f"Got open_loop_horizon={self.open_loop_horizon}, causal_action_chunk_len={causal_chunk_len}."
+                )
 
         self.actions_from_chunk_completed = 0
         self.pred_action_chunk = None

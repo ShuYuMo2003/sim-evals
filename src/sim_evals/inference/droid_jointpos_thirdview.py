@@ -11,11 +11,11 @@ class Client(InferenceClient):
         self,
         remote_host: str = "localhost",
         remote_port: int = 8000,
-        open_loop_horizon: int = 8,
+        open_loop_horizon: int | None = None,
         openpi_action_mode: str = "joint_position",
         openpi_control_dt: float = 1.0 / 15.0,
     ) -> None:
-        self.open_loop_horizon = open_loop_horizon
+        self.open_loop_horizon = None if open_loop_horizon is None else int(open_loop_horizon)
         self.openpi_action_mode = openpi_action_mode
         self.openpi_control_dt = float(openpi_control_dt)
         self.client = websocket_client_policy.WebsocketClientPolicy(remote_host, remote_port)
@@ -53,11 +53,18 @@ class Client(InferenceClient):
         right_img = image_tools.resize_with_pad(curr_obs["right_image"], 180, 320)
         left_img = image_tools.resize_with_pad(curr_obs["left_image"], 180, 320)
         wrist_img = image_tools.resize_with_pad(curr_obs["wrist_image"], 180, 320)
+        history_views = {
+            "observation/exterior_image_0_left": right_img,
+            "observation/exterior_image_1_left": left_img,
+            "observation/wrist_image_left": wrist_img,
+        }
         stitched_frame = np.concatenate([right_img, left_img, wrist_img], axis=1)
-        if (
-            self.actions_from_chunk_completed == 0
-            or self.actions_from_chunk_completed >= self.open_loop_horizon
-        ):
+        needs_query = self.actions_from_chunk_completed == 0 or self.pred_action_chunk is None
+        if not needs_query:
+            chunk_horizon = int(self.pred_action_chunk.shape[0])
+            refresh_horizon = chunk_horizon if self.open_loop_horizon is None else min(self.open_loop_horizon, chunk_horizon)
+            needs_query = self.actions_from_chunk_completed >= refresh_horizon
+        if needs_query:
             executed_count = self.actions_from_chunk_completed
             self.actions_from_chunk_completed = 0
             request_data = {
@@ -73,9 +80,13 @@ class Client(InferenceClient):
             if len(self.executed_actions_since_request) > 0:
                 request_data["history/executed_actions"] = np.stack(self.executed_actions_since_request, axis=0).astype(np.float32)
             if len(self.image_history_since_request) > 0:
-                history_steps, history_frames = zip(*self.image_history_since_request)
+                history_steps, history_view_dicts = zip(*self.image_history_since_request)
                 request_data["history/step_indices"] = np.asarray(history_steps, dtype=np.int64)
-                request_data["history/stitched_frames"] = np.stack(history_frames, axis=0).astype(np.uint8, copy=False)
+                for request_key in history_views:
+                    request_data[f"history/{request_key}"] = np.stack(
+                        [view_dict[request_key] for view_dict in history_view_dicts],
+                        axis=0,
+                    ).astype(np.uint8, copy=False)
             self.pred_action_chunk = self._convert_openpi_actions(
                 self.client.infer(request_data)["actions"],
                 curr_obs["joint_position"],
@@ -83,7 +94,12 @@ class Client(InferenceClient):
             self.executed_actions_since_request = []
             self.image_history_since_request = []
         else:
-            self.image_history_since_request.append((int(self.control_step), stitched_frame.copy()))
+            self.image_history_since_request.append(
+                (
+                    int(self.control_step),
+                    {key: value.copy() for key, value in history_views.items()},
+                )
+            )
 
         action = self.pred_action_chunk[self.actions_from_chunk_completed]
         self.actions_from_chunk_completed += 1

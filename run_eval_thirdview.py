@@ -39,7 +39,7 @@ def main(
     scene: int = 1,
     remote_host: str = "localhost",
     remote_port: int = 8000,
-    open_loop_horizon: int = 8,
+    open_loop_horizon: int | None = None,
     max_steps: int | None = None,
 ):
     _sanitize_isaac_runtime_env()
@@ -89,28 +89,30 @@ def main(
     video_dir.mkdir(parents=True, exist_ok=True)
     if max_steps is None:
         max_steps = env.env.max_episode_length
-    with torch.no_grad():
-        for ep in range(episodes):
-            obs, _ = env.reset()
-            obs, _ = env.reset()
-            video = []
-            for _ in tqdm(range(max_steps), desc=f"Episode {ep + 1}/{episodes}"):
-                ret = client.infer(obs, instruction)
-                video.append(ret["viz"])
-                action = torch.tensor(ret["action"])[None]
-                obs, _, term, trunc, _ = env.step(action)
-                if term or trunc:
-                    break
+    try:
+        with torch.no_grad():
+            for ep in range(episodes):
+                obs, _ = env.reset()
+                obs, _ = env.reset()
+                client.reset()
+                video = []
+                for _ in tqdm(range(max_steps), desc=f"Episode {ep + 1}/{episodes}"):
+                    ret = client.infer(obs, instruction)
+                    video.append(ret["viz"])
+                    action = torch.tensor(ret["action"])[None]
+                    obs, _, term, trunc, _ = env.step(action)
+                    if term or trunc:
+                        break
 
-            client.reset()
-            mediapy.write_video(
-                video_dir / f"episode_{ep}.mp4",
-                video,
-                fps=15,
-            )
-
-    env.close()
-    simulation_app.close()
+                mediapy.write_video(
+                    video_dir / f"episode_{ep}.mp4",
+                    video,
+                    fps=15,
+                )
+    finally:
+        client.close()
+        env.close()
+        simulation_app.close()
 
 
 if __name__ == "__main__":

@@ -51,6 +51,11 @@ class Client(InferenceClient):
         self.executed_actions_since_request = []
         self.image_history_since_request = []
 
+    def close(self):
+        ws = getattr(self.client, "_ws", None)
+        if ws is not None:
+            ws.close()
+
     def infer(self, obs: dict, instruction: str) -> dict:
         curr_obs = self._extract_observation(obs)
         if self.control_step > 0:
